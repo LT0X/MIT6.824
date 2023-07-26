@@ -1,0 +1,1 @@
+	if len(os.Args) < 3 {
