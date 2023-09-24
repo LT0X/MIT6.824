@@ -355,8 +355,9 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	judge2 := (args.Term >= rf.currentTerm || rf.votedFor == int32(args.CandidateId))
 	judge3 := int32(args.LastLogTerm) >= rf.logLastTerm
-	// fmt.Printf("&&&&&args  lastterm %v rf index %v rflogTerm %v\n",
-	// 	args.LastLogTerm, rf.me, rf.logLastTerm)
+	fmt.Printf("&&&&&args  lastterm %v rf index %v rflogTerm %v\n",
+		args.LastLogTerm, rf.me, rf.logLastTerm)
+
 	reply.Team = rf.currentTerm
 	fmt.Printf("index %v j1 %v j2 %v j3 %v\n", rf.me, judge, judge2, judge3)
 	if judge && judge2 && judge3 {
@@ -457,7 +458,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			//保证数组索引和log Index 的一致性
 			// rf.logLastIndex = len(rf.logs) - 1
 			rf.logLastIndex = rf.lastIncludedIndex + len(rf.logs) - 1
-
+			index = len(rf.logs) - 1
 			rf.logLastTerm = rf.logs[index].Term
 			rf.currentTerm = rf.logs[index].Term
 			reply.Success = true
@@ -481,8 +482,10 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			rf.logs = append(rf.logs, args.Entries...)
 			// rf.logLastIndex = len(rf.logs) -1
 			rf.logLastIndex = rf.lastIncludedIndex + len(rf.logs) - 1
+			index = len(rf.logs) - 1
 			rf.currentTerm = rf.logs[index].Term
 			rf.logLastTerm = rf.logs[index].Term
+			fmt.Printf("<<<<<<< index %v \n", index)
 			reply.Success = true
 			rf.isLogCommon = true
 			fmt.Printf("1添加成功 index %v lastTerm %v loglastindex %v\n", rf.me, rf.logLastTerm, rf.logLastIndex)
@@ -519,6 +522,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 				rf.logs = rf.logs[:preIndex+1]
 				rf.logs = append(rf.logs, args.Entries...)
 				// rf.logLastIndex = len(rf.logs) - 1
+				index = len(rf.logs) - 1
 				rf.logLastIndex = rf.lastIncludedIndex + len(rf.logs) - 1
 				rf.currentTerm = rf.logs[index].Term
 				rf.logLastTerm = rf.logs[index].Term
@@ -1093,8 +1097,8 @@ func (rf *Raft) FCommitLogRunTime() {
 					// default:
 					// 	fmt.Printf("index %v 管道写入失败了>>>>>>>>>>>\n", rf.me)
 					// }
-					fmt.Printf("----------index %v i %v 在 commitindex %v commad %v  loglast %v \n",
-						rf.me, i, rf.commitIndex, commad, rf.logLastIndex)
+					fmt.Printf("----------index %v i %v 在 commitindex %v commad %v  loglast %v Term %v \n",
+						rf.me, i, rf.commitIndex, commad, rf.logLastIndex, rf.logLastTerm)
 					// i, i2, i3 := rf.GetNowTime()
 					// // fmt.Printf("++++++++节点开始当前时间是 %02d 分 %02d 秒 %d 毫秒\n",
 					// // 	i, i2, i3)
