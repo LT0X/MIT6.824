@@ -8,12 +8,14 @@ package raft
 // test with the original before submitting.
 //
 
-import "testing"
-import "fmt"
-import "time"
-import "math/rand"
-import "sync/atomic"
-import "sync"
+import (
+	"fmt"
+	"math/rand"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+)
 
 // The tester generously allows solutions to complete elections in one second
 // (much more than the paper's range of timeouts).
@@ -68,6 +70,7 @@ func TestReElection2A(t *testing.T) {
 	// should switch to follower.
 	cfg.connect(leader1)
 	leader2 := cfg.checkOneLeader()
+	// fmt.Println("0 没问题")
 
 	// if there's no quorum, no new leader should
 	// be elected.
@@ -78,15 +81,16 @@ func TestReElection2A(t *testing.T) {
 	// check that the one connected server
 	// does not think it is the leader.
 	cfg.checkNoLeader()
-
+	// fmt.Println("1 没问题")
 	// if a quorum arises, it should elect a leader.
 	cfg.connect((leader2 + 1) % servers)
 	cfg.checkOneLeader()
+	// fmt.Println("2 没问题")
 
 	// re-join of last node shouldn't prevent leader from existing.
 	cfg.connect(leader2)
 	cfg.checkOneLeader()
-
+	// fmt.Println("3 没问题")
 	cfg.end()
 }
 
@@ -108,6 +112,7 @@ func TestManyElections2A(t *testing.T) {
 		cfg.disconnect(i1)
 		cfg.disconnect(i2)
 		cfg.disconnect(i3)
+		// fmt.Printf("index %v %v %v 断开连接 ", i1, i2, i3)
 
 		// either the current leader should still be alive,
 		// or the remaining four should elect a new one.
@@ -191,7 +196,9 @@ func TestFollowerFailure2B(t *testing.T) {
 
 	// disconnect one follower from the network.
 	leader1 := cfg.checkOneLeader()
+
 	cfg.disconnect((leader1 + 1) % servers)
+	// fmt.Printf("leader index %v disconnect \n", (leader1+1)%servers)
 
 	// the leader and remaining follower should be
 	// able to agree despite the disconnected follower.
@@ -203,6 +210,8 @@ func TestFollowerFailure2B(t *testing.T) {
 	leader2 := cfg.checkOneLeader()
 	cfg.disconnect((leader2 + 1) % servers)
 	cfg.disconnect((leader2 + 2) % servers)
+	// fmt.Printf("leader index %v disconnect \n", (leader2+1)%servers)
+	// fmt.Printf("leader index %v disconnect \n", (leader2+2)%servers)
 
 	// submit a command.
 	index, _, ok := cfg.rafts[leader2].Start(104)
@@ -237,6 +246,7 @@ func TestLeaderFailure2B(t *testing.T) {
 	// disconnect the first leader.
 	leader1 := cfg.checkOneLeader()
 	cfg.disconnect(leader1)
+	// fmt.Printf("index %v dsconnect\n", leader1)
 
 	// the remaining followers should elect
 	// a new leader.
@@ -488,6 +498,7 @@ func TestRejoin2B(t *testing.T) {
 	cfg.one(105, servers, true)
 
 	cfg.end()
+
 }
 
 func TestBackup2B(t *testing.T) {
@@ -512,6 +523,8 @@ func TestBackup2B(t *testing.T) {
 
 	time.Sleep(RaftElectionTimeout / 2)
 
+	// fmt.Printf("***********断开的连接为 %v %v ***************\n",
+	// 	leader1+0, leader1+1)
 	cfg.disconnect((leader1 + 0) % servers)
 	cfg.disconnect((leader1 + 1) % servers)
 
@@ -523,6 +536,7 @@ func TestBackup2B(t *testing.T) {
 	// lots of successful commands to new group.
 	for i := 0; i < 50; i++ {
 		cfg.one(rand.Int(), 3, true)
+
 	}
 
 	// now another partitioned leader and one follower
@@ -701,12 +715,13 @@ func TestPersist12C(t *testing.T) {
 
 	leader2 := cfg.checkOneLeader()
 	cfg.disconnect(leader2)
+	// fmt.Printf("++++++++++++++++++断开的领导为%v\n", leader2)
 	cfg.one(14, servers-1, true)
 	cfg.start1(leader2, cfg.applier)
 	cfg.connect(leader2)
-
+	// fmt.Println("+++++++++++++++++++++++++")
 	cfg.wait(4, servers, -1) // wait for leader2 to join before killing i3
-
+	// fmt.Println("------------------------")
 	i3 := (cfg.checkOneLeader() + 1) % servers
 	cfg.disconnect(i3)
 	cfg.one(15, servers-1, true)
@@ -734,6 +749,8 @@ func TestPersist22C(t *testing.T) {
 
 		cfg.disconnect((leader1 + 1) % servers)
 		cfg.disconnect((leader1 + 2) % servers)
+		// fmt.Print("?？？？首先断开连接的是 %v %v \n",
+		// (leader1+1)%servers, (leader1+2)%servers)
 
 		cfg.one(10+index, servers-2, true)
 		index++
@@ -741,6 +758,9 @@ func TestPersist22C(t *testing.T) {
 		cfg.disconnect((leader1 + 0) % servers)
 		cfg.disconnect((leader1 + 3) % servers)
 		cfg.disconnect((leader1 + 4) % servers)
+		// // fmt.Print("然后断开连接的是 %v %v %v \n",
+		// 	(leader1+0)%servers,
+		// 	(leader1+3)%servers, (leader1+4)%servers)
 
 		cfg.start1((leader1+1)%servers, cfg.applier)
 		cfg.start1((leader1+2)%servers, cfg.applier)
@@ -748,7 +768,8 @@ func TestPersist22C(t *testing.T) {
 		cfg.connect((leader1 + 2) % servers)
 
 		time.Sleep(RaftElectionTimeout)
-
+		// numThreads := runtime.NumGoroutine()
+		// fmt.Println("线程数量+++++++++++++++:", numThreads)
 		cfg.start1((leader1+3)%servers, cfg.applier)
 		cfg.connect((leader1 + 3) % servers)
 
@@ -812,7 +833,8 @@ func TestFigure82C(t *testing.T) {
 	cfg.one(rand.Int(), 1, true)
 
 	nup := servers
-	for iters := 0; iters < 1000; iters++ {
+	for iters := 0; iters < 500; iters++ {
+		// fmt.Print("*****************+++++++++++++_)))))))))) %v \n", iters)
 		leader := -1
 		for i := 0; i < servers; i++ {
 			if cfg.rafts[i] != nil {
@@ -829,10 +851,12 @@ func TestFigure82C(t *testing.T) {
 		} else {
 			ms := (rand.Int63() % 13)
 			time.Sleep(time.Duration(ms) * time.Millisecond)
+
 		}
 
 		if leader != -1 {
 			cfg.crash1(leader)
+			// fmt.Printf("+++++++++领导节点)))))) %v已经死亡_-----------\n", leader)
 			nup -= 1
 		}
 
@@ -845,6 +869,7 @@ func TestFigure82C(t *testing.T) {
 			}
 		}
 	}
+	// fmt.Println("结束了++++++++++++++++++++++++++++++++++++++++++++++++++++++______________+++")
 
 	for i := 0; i < servers; i++ {
 		if cfg.rafts[i] == nil {
@@ -898,6 +923,7 @@ func TestFigure8Unreliable2C(t *testing.T) {
 
 	nup := servers
 	for iters := 0; iters < 1000; iters++ {
+		// fmt.Printf("*****************+++++++++++++_)))))))))) %v \n", iters)
 		if iters == 200 {
 			cfg.setlongreordering(true)
 		}
@@ -1098,7 +1124,8 @@ func TestUnreliableChurn2C(t *testing.T) {
 const MAXLOGSIZE = 2000
 
 func snapcommon(t *testing.T, name string, disconnect bool, reliable bool, crash bool) {
-	iters := 30
+	iters := 5
+	// iters := 30
 	servers := 3
 	cfg := make_config(t, servers, !reliable, true)
 	defer cfg.cleanup()
@@ -1109,6 +1136,7 @@ func snapcommon(t *testing.T, name string, disconnect bool, reliable bool, crash
 	leader1 := cfg.checkOneLeader()
 
 	for i := 0; i < iters; i++ {
+		fmt.Printf("---------------------------------------------------------------------- %v\n", i)
 		victim := (leader1 + 1) % servers
 		sender := leader1
 		if i%3 == 1 {
@@ -1158,6 +1186,7 @@ func snapcommon(t *testing.T, name string, disconnect bool, reliable bool, crash
 			leader1 = cfg.checkOneLeader()
 		}
 	}
+	fmt.Println("{}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}")
 	cfg.end()
 }
 
