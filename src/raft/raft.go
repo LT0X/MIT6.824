@@ -80,16 +80,17 @@ type Raft struct {
 	matchIndex        []int               //领导者维护跟随者最高匹配的索引
 	nextIndex         []int               //领导者维护跟随者的next数组
 	isLogCommon       bool                //节点是否成功保持一致
-	failureCount      int                 //节点选举失败次数
-	isAppendDone      map[int]bool        //表示添加日志任务和添加快照是否完成
-	fCommitChan       chan FCommit        //节点监听提交任务管道
-	lCommitChan       chan AppendDone     //主节点监听复制日志任务管道
-	lSnapshotChan     chan LSnapshot      //主节点监听是否需要快照
+
+	isAppendDone  map[int]bool    //表示添加日志任务和添加快照是否完成
+	fCommitChan   chan FCommit    //节点监听提交任务管道
+	lCommitChan   chan AppendDone //主节点监听复制日志任务管道
+	lSnapshotChan chan LSnapshot  //主节点监听是否需要快照
 
 	lastIncludedIndex int   //快照日志最后的索引
 	lastIncludedTerm  int32 //快照日志最后的任期
 
 	// voteDoneNum int32               //表示已经完成投票的
+	// failureCount      int                 //节点选举失败次数
 
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
@@ -182,6 +183,14 @@ func (rf *Raft) GetState() (int, bool) {
 	return term, isleader
 }
 
+func (rf *Raft) GetVoteFor() int {
+	return int(rf.votedFor)
+}
+
+func (rf *Raft) GetRaftMe() int {
+	return rf.me
+}
+
 // save Raft's persistent state to stable storage,
 // where it can later be retrieved after a crash and restart.
 // see paper's Figure 2 for a description of what should be persistent.
@@ -238,7 +247,7 @@ func (rf *Raft) readPersist(data []byte) {
 	//   rf.xxx = xxx
 	//   rf.yyy = yyy
 	// }
-	fmt.Println("读取日志开始")
+	// fmt.Println("读取日志开始")
 	r := bytes.NewBuffer(data)
 	d := labgob.NewDecoder(r)
 	var votedFor int32
@@ -254,7 +263,7 @@ func (rf *Raft) readPersist(data []byte) {
 	var lastIncludedIndex int
 	var lastIncludedTerm int32
 
-	fmt.Println("开始解码++++++++++++++++")
+	// fmt.Println("开始解码++++++++++++++++")
 	if d.Decode(&currentTerm) != nil ||
 		d.Decode(&votedFor) != nil ||
 		d.Decode(&state) != nil ||
@@ -268,11 +277,11 @@ func (rf *Raft) readPersist(data []byte) {
 		d.Decode(&lastIncludedIndex) != nil ||
 		d.Decode(&lastIncludedTerm) != nil {
 
-		fmt.Println("错误！！！！！！！！！！！！！！！！！！！-")
+		// fmt.Println("错误！！！！！！！！！！！！！！！！！！！-")
 		return
 
 	} else {
-		fmt.Println("解码成功-----------------")
+		// fmt.Println("解码成功-----------------")
 		rf.votedFor = votedFor
 		rf.currentTerm = currentTerm
 		rf.logs = logs
@@ -321,8 +330,8 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	rf.logs = append(rf.logs, temp...)
 	rf.persist()
 	rf.mu.Unlock()
-	fmt.Printf("$$$$$ 快照!!!!!!!!!!! index is  %v lastInclue %v rf.index %v+++++++++\n",
-		index, rf.lastIncludedIndex, rf.me)
+	// fmt.Printf("$$$$$ 快照!!!!!!!!!!! index is  %v lastInclue %v rf.index %v+++++++++\n",
+	// 	index, rf.lastIncludedIndex, rf.me)
 }
 
 // example RequestVote RPC arguments structure.
@@ -355,11 +364,11 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	judge2 := (args.Term >= rf.currentTerm || rf.votedFor == int32(args.CandidateId))
 	judge3 := int32(args.LastLogTerm) >= rf.logLastTerm
-	fmt.Printf("&&&&&args  lastterm %v rf index %v rflogTerm %v\n",
-		args.LastLogTerm, rf.me, rf.logLastTerm)
+	// fmt.Printf("&&&&&args  lastterm %v rf index %v rflogTerm %v\n",
+	// 	args.LastLogTerm, rf.me, rf.logLastTerm)
 
 	reply.Team = rf.currentTerm
-	fmt.Printf("index %v j1 %v j2 %v j3 %v\n", rf.me, judge, judge2, judge3)
+	// fmt.Printf("index %v j1 %v j2 %v j3 %v\n", rf.me, judge, judge2, judge3)
 	if judge && judge2 && judge3 {
 		if int(args.LastLogTerm) == int(rf.logLastTerm) && args.LastLogIndex < int(rf.logLastIndex) {
 			reply.VoteGranted = false
@@ -379,7 +388,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		return
 	}
 	reply.VoteGranted = false
-	fmt.Printf("index %v拒接投票%v\n", rf.me, args.CandidateId)
+	// fmt.Printf("index %v拒接投票%v\n", rf.me, args.CandidateId)
 	// fmt.Printf("投过票了 index me %v  for %v 任期 %v\n",
 	// 	rf.me, args.CandidateId, rf.currentTerm)
 	return
@@ -387,11 +396,11 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 func (rf *Raft) RequestVoteRunTime(k int,
 	args *RequestVoteArgs, reply *RequestVoteReply) {
-	fmt.Printf("idnex %v 向  %v 请求投票 状态%v loglastIndex %v \n",
-		rf.me, k, rf.state, rf.logLastIndex)
+	// fmt.Printf("idnex %v 向  %v 请求投票 状态%v loglastIndex %v \n",
+	// 	rf.me, k, rf.state, rf.logLastIndex)
 	b := rf.sendRequestVote(k, args, reply)
 	if !b || !reply.VoteGranted {
-		fmt.Printf("C %v 奇怪的出错 index %v\n", rf.me, k)
+		// fmt.Printf("C %v 奇怪的出错 index %v\n", rf.me, k)
 		return
 	}
 	rf.voteNum++
@@ -410,13 +419,13 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			rf.heartbeat.now++
 			rf.currentTerm = args.Term
 			rf.votedFor = int32(args.LeaderId)
-			rf.failureCount = 0
+
 			reply.Success = true
 			// fmt.Printf("L index %v给 index %v 心跳 term %v\n",
 			// 	args.LeaderId, rf.me, rf.currentTerm)
 			// && rf.commitDone
 			if args.LeaderCommit > rf.commitIndex && args.PrevLogIndex != 0 {
-				fmt.Printf("rf.me %v 启动 提交线程 argsIndex %v\n", rf.me, args.PrevLogIndex)
+				// fmt.Printf("rf.me %v 启动 提交线程 argsIndex %v\n", rf.me, args.PrevLogIndex)
 				rf.fCommitChan <- FCommit{
 					CommitIndex:  args.LeaderCommit,
 					PrevLogIndex: args.PrevLogIndex,
@@ -430,17 +439,17 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	} else {
 
 		if args.Term < rf.currentTerm || rf.votedFor != int32(args.LeaderId) {
-			fmt.Printf("奇怪了奇怪了 rf.me %v Term %v votefor %v\n",
-				rf.me, rf.currentTerm, rf.votedFor)
+			// fmt.Printf("奇怪了奇怪了 rf.me %v Term %v votefor %v\n",
+			// 	rf.me, rf.currentTerm, rf.votedFor)
 			reply.Success = false
 			reply.Term = rf.currentTerm
 			reply.LRight = -1
 			return
 		}
 
-		fmt.Printf("&*&** argsTerm %v rf T %v\n", args.Term, rf.currentTerm)
+		// fmt.Printf("&*&** argsTerm %v rf T %v\n", args.Term, rf.currentTerm)
 		reply.Term = rf.currentTerm
-		fmt.Printf("index %v len %v  log %p\n", rf.me, rf.logLastIndex, &(rf.logs))
+		// fmt.Printf("index %v len %v  log %p\n", rf.me, rf.logLastIndex, &(rf.logs))
 
 		//日志最后的索引
 		index := rf.logLastIndex
@@ -452,8 +461,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		if len(rf.logs) == 1 &&
 			(args.PrevLogIndex <= 0 || args.PrevLogIndex == rf.lastIncludedIndex) {
 			//初始日志为空，不需要检查一致性
-			fmt.Printf("开始开始 nextIndex %v term %v\n",
-				args.PrevLogIndex, args.Term)
+			// fmt.Printf("开始开始 nextIndex %v term %v\n",
+			// 	args.PrevLogIndex, args.Term)
 			rf.logs = append(rf.logs, args.Entries...)
 			//保证数组索引和log Index 的一致性
 			// rf.logLastIndex = len(rf.logs) - 1
@@ -467,8 +476,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			return
 		}
 
-		fmt.Printf("index %v 需要检查Lindex %v prenext %v argsloglen %v\n",
-			rf.me, args.LeaderId, args.PrevLogIndex, len(args.Entries))
+		// fmt.Printf("index %v 需要检查Lindex %v prenext %v argsloglen %v\n",
+		// 	rf.me, args.LeaderId, args.PrevLogIndex, len(args.Entries))
 		// for _, v := range rf.logs {
 		// 	fmt.Printf("Value: %#v \n", v)
 		// }
@@ -485,10 +494,10 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			index = len(rf.logs) - 1
 			rf.currentTerm = rf.logs[index].Term
 			rf.logLastTerm = rf.logs[index].Term
-			fmt.Printf("<<<<<<< index %v \n", index)
+			// fmt.Printf("<<<<<<< index %v \n", index)
 			reply.Success = true
 			rf.isLogCommon = true
-			fmt.Printf("1添加成功 index %v lastTerm %v loglastindex %v\n", rf.me, rf.logLastTerm, rf.logLastIndex)
+			// fmt.Printf("1添加成功 index %v lastTerm %v loglastindex %v\n", rf.me, rf.logLastTerm, rf.logLastIndex)
 			rf.persist()
 			return
 
@@ -498,7 +507,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 				reply.LLeft = args.LLeft
 				reply.LRight = args.LRight
 				reply.IsOk = false
-				fmt.Println("第一次放回")
+				// fmt.Println("第一次放回")
 				return
 			}
 			//需要与主节点达成一致，然后开始复制日志
@@ -506,8 +515,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 				//长度不符合 ,
 				reply.LLeft = args.LLeft
 				reply.LRight = args.PrevLogIndex - 1
-				fmt.Printf("哈哈哈哈 l%v r%v 地址 %v\n",
-					reply.LLeft, reply.LRight, &reply)
+				// fmt.Printf("哈哈哈哈 l%v r%v 地址 %v\n",
+				// 	reply.LLeft, reply.LRight, &reply)
 				if reply.LRight == 0 {
 					reply.LRight = -100
 				}
@@ -528,7 +537,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 				rf.logLastTerm = rf.logs[index].Term
 				reply.Success = true
 				rf.isLogCommon = true
-				fmt.Printf("2添加成功 index %v lastTerm %v\n", rf.me, rf.logLastTerm)
+				// fmt.Printf("2添加成功 index %v lastTerm %v\n", rf.me, rf.logLastTerm)
 				rf.persist()
 				return
 
@@ -539,15 +548,15 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 				reply.IsOk = true
 				reply.LLeft = args.PrevLogIndex + 1
 				reply.LRight = args.LRight
-				fmt.Printf("+++rf %v 匹配成功 mid %v l %v r %v\n",
-					rf.me, args.PrevLogIndex, reply.LLeft, reply.LRight)
+				// fmt.Printf("+++rf %v 匹配成功 mid %v l %v r %v\n",
+				// 	rf.me, args.PrevLogIndex, reply.LLeft, reply.LRight)
 				return
 			} else {
 				//不通过，
 				reply.IsOk = false
 				reply.LLeft = args.LLeft
 				reply.LRight = args.PrevLogIndex - 1
-				fmt.Printf("不通过，哈哈 l %v  r%v\n", reply.LLeft, reply.LRight)
+				// fmt.Printf("不通过，哈哈 l %v  r%v\n", reply.LLeft, reply.LRight)
 				return
 			}
 
@@ -599,16 +608,18 @@ func (rf *Raft) AppendEntriesRunTime(k int, Done *int32,
 
 	//定位2
 
-	fmt.Printf("rf %v 向 %v发的日志长度 %v  ,\n", rf.me, k, len(args.Entries))
+	// fmt.Printf("rf %v 向 %v发的日志长度 %v  ,\n", rf.me, k, len(args.Entries))
 	b := rf.sendAppendEntries(k, args, reply)
 	if len(args.Entries) != 0 {
-		fmt.Printf("Lindex %v向index%v 发布日志内容  log %#v argsIndex %v argsTerm  %v\n",
-			rf.me, k, args.Entries[0], args.PrevLogIndex, args.Term)
+		// fmt.Printf("Lindex %v向index%v 发布日志内容  log %#v argsIndex %v argsTerm  %v\n",
+		// 	rf.me, k, args.Entries[0], args.PrevLogIndex, args.Term)
 	}
 	if b == false || reply.LRight == -1 {
 		//节点失去连接
-		fmt.Printf("rm %v 添加出错了%v\n", k, reply.Success)
+		// fmt.Printf("rm %v 添加出错了%v\n", k, reply.Success)
+		rf.mu.Lock()
 		rf.isAppendDone[k] = true
+		rf.mu.Unlock()
 		return
 	}
 
@@ -626,8 +637,8 @@ func (rf *Raft) AppendEntriesRunTime(k int, Done *int32,
 	var index int
 	for i := 0; reply.Success == false; i++ {
 
-		fmt.Printf("@@@@@ k is %v i is %v l %v r %v 地址 %v\n",
-			k, i, reply.LLeft, reply.LRight, &reply)
+		// fmt.Printf("@@@@@ k is %v i is %v l %v r %v 地址 %v\n",
+		// 	k, i, reply.LLeft, reply.LRight, &reply)
 
 		if reply.LRight == -100 {
 			//用来改写因为rpc出现默认值重写旧值
@@ -700,21 +711,21 @@ func (rf *Raft) AppendEntriesRunTime(k int, Done *int32,
 				return
 			}
 
-			fmt.Printf("检查 l %v r %v mid %v last %v\n",
-				args.LLeft, args.LRight, mid, rf.lastIncludedIndex)
+			// fmt.Printf("检查 l %v r %v mid %v last %v\n",
+			// 	args.LLeft, args.LRight, mid, rf.lastIncludedIndex)
 			args.PrevLogTerm = rf.logs[index].Term
 			args.Entries = nil
 			args.First = false
 
 			//开始发送
-			fmt.Printf("二分匹配 rm %vargs LL %v LR %v mid %v\n",
-				k, args.LLeft, args.LRight, args.PrevLogIndex)
+			// fmt.Printf("二分匹配 rm %vargs LL %v LR %v mid %v\n",
+			// 	k, args.LLeft, args.LRight, args.PrevLogIndex)
 			rf.sendAppendEntries(k, args, reply)
 
 		} else {
 			if reply.LRight < 0 {
 				//寄了，匹配不到
-				fmt.Println("寄了寄了寄了*********")
+				// fmt.Println("寄了寄了寄了*********")
 				rf.isAppendDone[k] = true
 				rf.nextIndex[k] = rf.lastIncludedIndex
 				return
@@ -740,33 +751,34 @@ func (rf *Raft) AppendEntriesRunTime(k int, Done *int32,
 			args.LRight = reply.LRight
 			rf.nextIndex[k] = reply.LRight + 1
 			//开始发送k
-			fmt.Printf("最佳二分匹配 rm %vargs LL %v LR %v mid %v\n",
-				k, args.LLeft, args.LRight, bestIndex)
+			// fmt.Printf("最佳二分匹配 rm %vargs LL %v LR %v mid %v\n",
+			// 	k, args.LLeft, args.LRight, bestIndex)
 			rf.sendAppendEntries(k, args, reply)
 
 		}
 
 	}
-	temp := rf.nextIndex[k]
+	// temp := rf.nextIndex[k]
 	rf.nextIndex[k] += len(args.Entries)
-	fmt.Printf("index %v 的nextindex %v -> %v last %v \n ", k, temp, rf.nextIndex[k], rf.logLastIndex)
+	// fmt.Printf("index %v 的nextindex %v -> %v last %v \n ", k, temp, rf.nextIndex[k], rf.logLastIndex)
 	rf.matchIndex[k] = rf.nextIndex[k] - 1
 	//k节点同步成功，发送管道信息
-	fmt.Printf("^^^^管道发送 appendIndex %v\n", rf.matchIndex[k])
+	// fmt.Printf("^^^^管道发送 appendIndex %v\n", rf.matchIndex[k])
 	rf.lCommitChan <- AppendDone{
 		k:           k,
 		AppendIndex: rf.matchIndex[k],
 		IsExit:      false,
 	}
+	rf.mu.Lock()
 	rf.isAppendDone[k] = true
-
+	rf.mu.Unlock()
 }
 
 func (rf *Raft) SendAppendLogsHandler() {
 
 	for true {
 
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(27 * time.Millisecond)
 		if rf.state != "L" {
 			return
 		}
@@ -797,8 +809,13 @@ func (rf *Raft) SendAppendLogsHandler() {
 				if k == rf.me {
 					continue
 				}
-				if !rf.isAppendDone[k] {
-					fmt.Printf("rf %v 未完成任务\n", k)
+
+				rf.mu.Lock()
+				ok := rf.isAppendDone[k]
+				rf.mu.Unlock()
+
+				if !ok {
+					// fmt.Printf("rf %v 未完成任务\n", k)
 					continue
 				}
 
@@ -839,8 +856,8 @@ func (rf *Raft) SendAppendLogsHandler() {
 					LeaderCommit: rf.commitIndex,
 				}
 
-				fmt.Printf("&&&&&&&&&&& L index %v向 %v 发送 日志 [%v:%v]\n",
-					rf.me, k, nextIndex, lastIndex+1)
+				// fmt.Printf("&&&&&&&&&&& L index %v向 %v 发送 日志 [%v:%v]\n",
+				// 	rf.me, k, nextIndex, lastIndex+1)
 				reply := AppendEntriesReply{}
 
 				rf.isAppendDone[k] = false
@@ -912,7 +929,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 			SnapshotTerm:  int(rf.lastIncludedTerm),
 			SnapshotIndex: rf.lastIncludedIndex,
 		}
-		fmt.Printf("&&&&&&&&&&&&&&&&被应用到状态机了 %v\n", rf.me)
+		// fmt.Printf("&&&&&&&&&&&&&&&&被应用到状态机了 %v\n", rf.me)
 		rf.commitIndex = args.LastIncludedIndex
 
 		rf.persister.snapshot = args.Data
@@ -930,7 +947,7 @@ func (rf *Raft) InstallSnapshotRunTime() {
 			if v.IsExit == true {
 				return
 			}
-			fmt.Printf("执行了*********** rm %v \n", v.k)
+			// fmt.Printf("执行了*********** rm %v \n", v.k)
 			//向k 发送快照
 			args := InstallSnapshotArgs{
 				Term:              rf.currentTerm,
@@ -947,7 +964,7 @@ func (rf *Raft) InstallSnapshotRunTime() {
 				rf.matchIndex[v.k] = args.LastIncludedIndex
 				rf.nextIndex[v.k] = rf.matchIndex[v.k] + 1
 				// rf.isAppendDone[v.k] = true
-				fmt.Printf("Done 完成 %v\n", v.k)
+				// fmt.Printf("Done 完成 %v\n", v.k)
 			}
 			rf.isAppendDone[v.k] = true
 
@@ -978,7 +995,7 @@ func (rf *Raft) KillLCommitRunTime() {
 	case <-time.After(100 * time.Millisecond):
 		// 在一秒内无法写入通道
 		// 可以视为通道已关闭
-		fmt.Println("————————管道已经关闭")
+		// fmt.Println("————————管道已经关闭")
 		return
 	}
 
@@ -991,7 +1008,7 @@ func (rf *Raft) KillLCommitRunTime() {
 
 func (rf *Raft) LCommitLogRunTime() {
 
-	fmt.Printf("index %v 主节点监听进程启动", rf.me)
+	// fmt.Printf("index %v 主节点监听进程启动", rf.me)
 	commitMap := make(map[int]int, 0)
 
 	for true {
@@ -999,18 +1016,21 @@ func (rf *Raft) LCommitLogRunTime() {
 		select {
 		case v, ok := <-rf.lCommitChan:
 
+			// fmt.Printf("F %v d commitIndex %v\n", rf.me, rf.commitIndex)
+
 			if ok && !v.IsExit {
 
 				if v.AppendIndex <= rf.commitIndex {
 					//已经提交了，不做处理
-					fmt.Println("已经提交，******")
+					// fmt.Println("已经提交，******")
 					continue
 				} else {
 					// commitIndex := rf.commitIndex - rf.lastIncludedIndex
-					fmt.Printf("VappendIndex %v loglast %v", v.AppendIndex, rf.logLastIndex)
+					// fmt.Printf("VappendIndex %v loglast %v", v.AppendIndex, rf.logLastIndex)
 					commitMap[v.AppendIndex]++
 					index := commitMap[v.AppendIndex]
-					fmt.Printf("index 是 这个 %v-------\n", index)
+					// fmt.Printf("打算index 是 这个 %v------- rm index %v commitIndex %v appIndex %v\n",
+					// 	index, rf.me, rf.commitIndex, v.AppendIndex)
 					if index >= len(rf.peers)/2 {
 						//到达提交条件,开始提交
 						for i := rf.commitIndex + 1; i <= v.AppendIndex; i++ {
@@ -1024,9 +1044,12 @@ func (rf *Raft) LCommitLogRunTime() {
 								CommandIndex: i,
 							}
 
+							fmt.Printf("开始发送到应用机 me %v , i %v,  append %v \n", rf.me, i, v.AppendIndex)
 							rf.applyCh <- x
+
 							fmt.Printf("*********{lindex %v commitindex %v commad %v  pre %v i %v AppendIndex %v\n",
 								rf.me, index, commad, rf.preCommitIndex, i, v.AppendIndex)
+
 						}
 						rf.commitIndex = v.AppendIndex
 						rf.persist()
@@ -1051,35 +1074,37 @@ func (rf *Raft) FCommitLogRunTime() {
 
 		select {
 		case v, ok := <-rf.fCommitChan:
+
+			// fmt.Printf("F %v d commitIndex %v\n", rf.me, rf.commitIndex)
 			if ok {
 				//准备提交
 				if v.PrevLogIndex-rf.lastIncludedIndex < 0 {
-					fmt.Printf("索引超出，数组溢出*********************")
+					// fmt.Printf("索引超出，数组溢出*********************")
 					continue
 				}
 
 				if v.PrevLogIndex == 0 ||
 					v.PrevLogIndex > rf.logLastIndex ||
 					rf.logs[v.PrevLogIndex-rf.lastIncludedIndex].Term != v.PrevLogTerm {
-					fmt.Printf("*^^^^^^^ rf index %v rf Term %v args.Index %v args.Term %v len %v\n",
-						v.PrevLogIndex-rf.lastIncludedIndex, rf.logs[v.PrevLogIndex-rf.lastIncludedIndex].Term,
-						v.PrevLogIndex, v.PrevLogTerm, len(rf.logs))
+					// fmt.Printf("*^^^^^^^ rf index %v rf Term %v args.Index %v args.Term %v len %v\n",
+					// 	v.PrevLogIndex-rf.lastIncludedIndex, rf.logs[v.PrevLogIndex-rf.lastIncludedIndex].Term,
+					// 	v.PrevLogIndex, v.PrevLogTerm, len(rf.logs))
 
 					continue
 				}
 
-				fmt.Printf("@@@@@@@@@@@v pre index %v term %v\n", v.PrevLogIndex, v.PrevLogTerm)
+				// fmt.Printf("@@@@@@@@@@@v pre index %v term %v\n", v.PrevLogIndex, v.PrevLogTerm)
 				min := math.Min(float64(rf.logLastIndex), float64(v.CommitIndex))
 				lastCommitIndex := rf.commitIndex + 1
 				// rf.commitIndex = int(min)
-				fmt.Printf("准备了 index %v, min %v loglen %v commitIndex %v\n",
-					rf.me, min, rf.logLastIndex, v.CommitIndex)
+				// fmt.Printf("准备了 index %v, min %v loglen %v commitIndex %v\n",
+				// 	rf.me, min, rf.logLastIndex, v.CommitIndex)
 				// fmt.Printf("子节点 lastcomm %v min %v\n", lastCommitIndex, min)
 				for i := lastCommitIndex; i <= int(min); i++ {
 					index := i - rf.lastIncludedIndex
 					if index < 0 {
-						fmt.Printf("<>>><><><>><><><><<> i %v lastIncl %v index %v\n",
-							rf.me, rf.lastIncludedIndex, index)
+						// fmt.Printf("<>>><><><>><><><><<> i %v lastIncl %v index %v\n",
+						// 	rf.me, rf.lastIncludedIndex, index)
 						return
 					}
 					commad := rf.logs[index].Command
@@ -1097,8 +1122,8 @@ func (rf *Raft) FCommitLogRunTime() {
 					// default:
 					// 	fmt.Printf("index %v 管道写入失败了>>>>>>>>>>>\n", rf.me)
 					// }
-					fmt.Printf("----------index %v i %v 在 commitindex %v commad %v  loglast %v Term %v \n",
-						rf.me, i, rf.commitIndex, commad, rf.logLastIndex, rf.logLastTerm)
+					// fmt.Printf("----------index %v i %v 在 commitindex %v commad %v  loglast %v Term %v \n",
+					// 	rf.me, i, rf.commitIndex, commad, rf.logLastIndex, rf.logLastTerm)
 					// i, i2, i3 := rf.GetNowTime()
 					// // fmt.Printf("++++++++节点开始当前时间是 %02d 分 %02d 秒 %d 毫秒\n",
 					// // 	i, i2, i3)
@@ -1116,21 +1141,21 @@ func (rf *Raft) CommitLogRunTime(args AppendEntriesArgs) {
 		rf.mu.Unlock()
 		return
 	}
-	fmt.Printf("index %v 开始提交\n", rf.me)
+	// fmt.Printf("index %v 开始提交\n", rf.me)
 	rf.commitDone = false
 	if args.LeaderCommit > rf.commitIndex {
 		min := math.Min(float64(rf.logLastIndex), float64(args.LeaderCommit))
 		// max := math.Max(float64(rf.logLastIndex), float64(args.LeaderCommit))
 		lastCommitIndex := rf.commitIndex + 1
 		rf.commitIndex = int(min)
-		fmt.Printf("准备了 index %v,lastCommit %v min %v loglen %v\n",
-			rf.me, lastCommitIndex, min, rf.logLastIndex)
+		// fmt.Printf("准备了 index %v,lastCommit %v min %v loglen %v\n",
+		// 	rf.me, lastCommitIndex, min, rf.logLastIndex)
 		for i := lastCommitIndex; i <= int(min); i++ {
 
 			//防止节点还未同步，导致数组索引溢出
 			if i > rf.logLastIndex {
 				time.Sleep(time.Millisecond * 100)
-				fmt.Printf("这个测试的log len %v lastlog %v\n", len(rf.logs)-1, rf.logLastIndex)
+				// fmt.Printf("这个测试的log len %v lastlog %v\n", len(rf.logs)-1, rf.logLastIndex)
 			}
 
 			msg := ApplyMsg{
@@ -1139,8 +1164,8 @@ func (rf *Raft) CommitLogRunTime(args AppendEntriesArgs) {
 				CommandIndex: i,
 			}
 			rf.applyCh <- msg
-			fmt.Printf("----------index %v 在 commitindex %v log %v loglast %v\n",
-				rf.me, rf.commitIndex, rf.logs[i].Command, rf.logLastIndex)
+			// fmt.Printf("----------index %v 在 commitindex %v log %v loglast %v\n",
+			// 	rf.me, rf.commitIndex, rf.logs[i].Command, rf.logLastIndex)
 		}
 		rf.preCommitIndex = rf.commitIndex
 		// fmt.Printf("index %v 提交 commitindex %v \n", rf.me, rf.commitIndex)
@@ -1168,7 +1193,7 @@ func (rf *Raft) SendCommitIndex(commitIndex int) {
 		reply := AppendEntriesReply{}
 
 		if rf.state != "L" {
-			fmt.Printf("index %v已经不是领导者了 %v\n", rf.me, rf.state)
+			// fmt.Printf("index %v已经不是领导者了 %v\n", rf.me, rf.state)
 			return
 		}
 
@@ -1183,7 +1208,7 @@ func (rf *Raft) HeartbeatRunTime(k int,
 
 	rf.sendAppendEntries(k, &args, &reply)
 	if reply.Term > rf.currentTerm {
-		fmt.Printf("rf.me %v 被 %v 改变了!!!!", rf.me, k)
+		// fmt.Printf("rf.me %v 被 %v 改变了!!!!", rf.me, k)
 		rf.state = "F"
 		rf.currentTerm = reply.Term
 		rf.isLogCommon = false
@@ -1232,7 +1257,7 @@ func (rf *Raft) sendHeartbeat() {
 			reply := AppendEntriesReply{}
 
 			if rf.state != "L" {
-				fmt.Printf("index %v已经不是领导者了 %v\n", rf.me, rf.state)
+				// fmt.Printf("index %v已经不是领导者了 %v\n", rf.me, rf.state)
 				return
 			}
 			time.Sleep(time.Duration(50) * time.Millisecond)
@@ -1327,7 +1352,8 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		return index, term, isLeader
 	}
 
-	fmt.Printf("index %v state %v\n", rf.me, rf.state)
+	// fmt.Printf("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n")
+	// fmt.Printf("index %v state %v\n", rf.me, rf.state)
 	term, isLeader = rf.GetState()
 	rf.mu.Lock()
 	rf.logs = append(rf.logs, &log)
@@ -1335,7 +1361,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.logLastIndex = rf.lastIncludedIndex + len(rf.logs) - 1
 	rf.logLastTerm = nowTerm
 	index = rf.logLastIndex
-	fmt.Printf("!!!!@@@@@@@@@@ index is %v command %v\n", index, command)
+	// fmt.Printf("!!!!@@@@@@@@@@ index is %v command %v\n", index, command)
 	rf.mu.Unlock()
 
 	return index, term, isLeader
@@ -1350,8 +1376,8 @@ func (rf *Raft) Kill() {
 	atomic.StoreInt32(&rf.dead, 1)
 	// Your code here, if desired.\
 	rf.persist()
-	fmt.Printf("index %v 下线 ：cuuentterm %v 身份%v log len %v failureC %v\n",
-		rf.me, rf.currentTerm, rf.state, rf.logLastIndex, rf.failureCount)
+	// fmt.Printf("index %v 下线 ：cuuentterm %v 身份%v log len %v \n",
+	// 	rf.me, rf.currentTerm, rf.state, rf.logLastIndex)
 	// fmt.Printf("index %v Value: ", rf.me)
 	// for _, v := range rf.logs {
 	// 	fmt.Printf(" %#v ", v.Command)
@@ -1362,7 +1388,6 @@ func (rf *Raft) Kill() {
 	// defer close(rf.fCommitChan)
 	// defer close(rf.lCommitChan)
 
-	fmt.Println()
 }
 
 //
@@ -1394,7 +1419,7 @@ func (rf *Raft) ticker() {
 
 			rf.state = "C"
 			rf.currentTerm = atomic.AddInt32(&Term, 1)
-			fmt.Printf("index %v 开始选举 term %v lastlogTerm %v\n", rf.me, rf.currentTerm, rf.logLastTerm)
+			// fmt.Printf("index %v 开始选举 term %v lastlogTerm %v\n", rf.me, rf.currentTerm, rf.logLastTerm)
 			if rf.currentTerm <= rf.voteTerm {
 				// fmt.Printf("index %v在 %v term已经投过票了\n ", rf.me, rf.currentTerm)
 				continue
@@ -1446,7 +1471,6 @@ func (rf *Raft) ticker() {
 					rf.me, rf.voteNum, rf.logLastIndex, rf.currentTerm)
 				//选举通过,成为leader,重置属性
 				rf.LeaderReset()
-				rf.failureCount = 0
 				rf.state = "L"
 				rf.persist()
 				go rf.sendHeartbeat()
@@ -1456,8 +1480,8 @@ func (rf *Raft) ticker() {
 				continue
 			}
 
-			fmt.Printf("index %v 选举失败\n", rf.me)
-			rf.failureCount++
+			// fmt.Printf("index %v 选举失败\n", rf.me)
+
 			rf.persist()
 
 		}
@@ -1512,11 +1536,11 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.logs[0] = &Log{
 		Term: -1,
 	}
-	fmt.Printf("index %v len %v 上线了\n", rf.me, len(rf.logs))
+	// fmt.Printf("index %v len %v 上线了\n", rf.me, len(rf.logs))
 
 	// Your initialization code here (2A, 2B, 2C).
 
-	fmt.Printf("&&&*****&&&&& rf %v 已经被创建 地址 %v\n", rf.me, &rf)
+	// fmt.Printf("&&&*****&&&&& rf %v 已经被创建 地址 %v\n", rf.me, &rf)
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
