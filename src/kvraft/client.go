@@ -2,7 +2,6 @@ package kvraft
 
 import (
 	"crypto/rand"
-	"fmt"
 	"math/big"
 	"sync/atomic"
 	"time"
@@ -92,7 +91,7 @@ func (ck *Clerk) Get(key string) string {
 	reply := GetReply{
 		NotLeader: false,
 	}
-	fmt.Printf("客户端开始发送  opid %v op %v \n", args.Id, args)
+	// fmt.Printf("客户端开始发送  opid %v op %v \n", args.Id, args)
 
 	// channel := ck.channelPool.GetChannel(int32(args.Id))
 
@@ -110,8 +109,8 @@ func (ck *Clerk) Get(key string) string {
 		ok := ck.sendGetRPC(ck.leaderIndex, &args, &reply)
 
 		if !ok {
-			fmt.Printf("客户端发起RPC失败 opid %v,reply %v,cklindex %v\n",
-				args.Id, reply, ck.leaderIndex)
+			// fmt.Printf("客户端发起RPC失败 opid %v,reply %v,cklindex %v\n",
+			// 	args.Id, reply, ck.leaderIndex)
 
 			reply.NotLeader = true
 			// if ck.serverLastOpId >= args.Id {
@@ -141,7 +140,7 @@ func (ck *Clerk) Get(key string) string {
 	// dur := time.Since(start)
 	// fmt.Printf("!!!!!! Get花费的时间为 %v\n", dur)
 
-	fmt.Printf("opid %v get 完成了 \n", args.Id)
+	// fmt.Printf("opid %v get 完成了 \n", args.Id)
 	return reply.Value
 }
 
@@ -162,7 +161,7 @@ func (ck *Clerk) sendGetRPCRunTime(
 
 		ok = ck.sendGetRPC(ck.leaderIndex, args, reply)
 		if !ok {
-			fmt.Printf("客户端发起RPC失败 opid %v,reply %v\n", args.Id, reply)
+			// fmt.Printf("客户端发起RPC失败 opid %v,reply %v\n", args.Id, reply)
 			reply.NotLeader = true
 			// if ck.serverLastOpId >= args.Id {
 			// 	reply.Done = true
@@ -170,7 +169,7 @@ func (ck *Clerk) sendGetRPCRunTime(
 			// }
 		}
 	}
-	fmt.Printf("opid %v 结束了 \n", args.Id)
+	// fmt.Printf("opid %v 结束了 \n", args.Id)
 	channel <- ok
 
 }
@@ -195,7 +194,7 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 	reply := PutAppendReply{
 		NotLeader: false,
 	}
-	fmt.Printf("客户端开始发送  opid %v args %v\n", args.Id, args)
+	// fmt.Printf("客户端开始发送  opid %v args %v\n", args.Id, args)
 
 	// channel := ck.channelPool.GetChannel(int32(args.Id))
 
@@ -213,8 +212,8 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 		ok := ck.sendPutAppendRPC(ck.leaderIndex, &args, &reply)
 
 		if !ok {
-			fmt.Printf("客户端发起RPC失败 opid %v,reply %v,cklindex %v\n",
-				args.Id, reply, ck.leaderIndex)
+			// fmt.Printf("客户端发起RPC失败 opid %v,reply %v,cklindex %v\n",
+			// 	args.Id, reply, ck.leaderIndex)
 
 			reply.NotLeader = true
 			// if ck.serverLastOpId >= args.Id {
@@ -225,7 +224,7 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 
 	}
 
-	fmt.Printf("opid %v put 完成了 \n", args.Id)
+	// fmt.Printf("opid %v put 完成了 \n", args.Id)
 
 	// // start := time.Now()
 	// for !reply.Done {
@@ -272,8 +271,8 @@ func (ck *Clerk) sendPutAppendRPCRunTime(
 		// fmt.Printf("发送 kv 的缓存 %v\n", ck.leaderIndex)
 		ok = ck.sendPutAppendRPC(ck.leaderIndex, args, reply)
 		if !ok {
-			fmt.Printf("客户端发起RPC失败 opid %v,reply %v,cklindex %v\n",
-				args.Id, reply, ck.leaderIndex)
+			// fmt.Printf("客户端发起RPC失败 opid %v,reply %v,cklindex %v\n",
+			// 	args.Id, reply, ck.leaderIndex)
 
 			reply.NotLeader = true
 
@@ -285,7 +284,7 @@ func (ck *Clerk) sendPutAppendRPCRunTime(
 	}
 
 	// fmt.Printf("opid 客户端结束 %v reply %v\n", args.Id, reply)
-	fmt.Printf("opid %v 结束了 \n", args.Id)
+	// fmt.Printf("opid %v 结束了 \n", args.Id)
 	channel <- true
 
 }

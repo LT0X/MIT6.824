@@ -20,7 +20,6 @@ package raft
 import (
 	//	"bytes"
 	"bytes"
-	"fmt"
 	"math"
 	"math/rand"
 	"sync"
@@ -47,6 +46,7 @@ type ApplyMsg struct {
 	CommandValid bool
 	Command      interface{}
 	CommandIndex int
+	IsLast       bool
 
 	// For 2D:
 	SnapshotValid bool
@@ -223,6 +223,8 @@ func (rf *Raft) persist() {
 	e.Encode(rf.lastIncludedTerm)
 
 	raftstate := w.Bytes()
+
+	// fmt.Printf("raft %v 状态大小为 %v loglen %v\n", rf.me, len(raftstate), len(rf.logs))
 	rf.persister.Save(raftstate, rf.persister.snapshot)
 }
 
@@ -321,6 +323,8 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	rf.persister.snapshot = snapshot
 	lastIndex := index + 1 - rf.lastIncludedIndex
 	rf.lastIncludedIndex = index
+	// fmt.Printf("开始rf %v节点 logLastIndex %v lastIncludeIndex %v len log %v index %v\n",
+	// 	rf.me, rf.logLastIndex, rf.lastIncludedIndex, len(rf.logs), index)
 	rf.lastIncludedTerm = rf.logs[rf.logLastIndex-rf.lastIncludedIndex].Term
 	if rf.logLastIndex-rf.lastIncludedIndex == 0 {
 		rf.lastIncludedTerm = rf.logLastTerm
@@ -328,10 +332,23 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	temp := rf.logs[lastIndex:]
 	rf.logs = rf.logs[0:1]
 	rf.logs = append(rf.logs, temp...)
+	// fmt.Printf("结束rf %v节点 logLastIndex %v lastIncludeIndex %v templen %v log %v index %v\n",
+	// 	rf.me, rf.logLastIndex, rf.lastIncludedIndex, len(temp), len(rf.logs), index)
 	rf.persist()
 	rf.mu.Unlock()
 	// fmt.Printf("$$$$$ 快照!!!!!!!!!!! index is  %v lastInclue %v rf.index %v+++++++++\n",
 	// 	index, rf.lastIncludedIndex, rf.me)
+}
+
+func (rf *Raft) CompressLogHandler(index int) {
+	//处理kvservice 发来的压缩日志请求
+
+	// log := rf.logs[1 : index-rf.lastIncludedIndex+1]
+
+	// // data := rf.persister.EncodingLog(log)
+
+	// rf.Snapshot(index, data)
+
 }
 
 // example RequestVote RPC arguments structure.
@@ -778,7 +795,7 @@ func (rf *Raft) SendAppendLogsHandler() {
 
 	for true {
 
-		time.Sleep(27 * time.Millisecond)
+		time.Sleep(13 * time.Millisecond)
 		if rf.state != "L" {
 			return
 		}
@@ -915,11 +932,18 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 
 	} else {
 		//日志清空,
-		rf.logs = rf.logs[0:1]
+
+		rf.mu.Lock()
+
+		// fmt.Printf("日志清空准备 %v argsLastIndex  %v rfLast %v\n",
+		// 	rf.me, args.LastIncludedIndex, rf.logLastIndex)
 		rf.logLastIndex = args.LastIncludedIndex
 		rf.logLastTerm = args.LastIncludedTerm
 		rf.lastIncludedIndex = args.LastIncludedIndex
 		rf.lastIncludedTerm = args.LastIncludedTerm
+		rf.logs = rf.logs[0:1]
+
+		rf.mu.Unlock()
 
 		//开始应用到状态机
 		rf.applyCh <- ApplyMsg{
@@ -1018,6 +1042,8 @@ func (rf *Raft) LCommitLogRunTime() {
 
 			// fmt.Printf("F %v d commitIndex %v\n", rf.me, rf.commitIndex)
 
+			// start := time.Now()
+
 			if ok && !v.IsExit {
 
 				if v.AppendIndex <= rf.commitIndex {
@@ -1044,11 +1070,15 @@ func (rf *Raft) LCommitLogRunTime() {
 								CommandIndex: i,
 							}
 
-							fmt.Printf("开始发送到应用机 me %v , i %v,  append %v \n", rf.me, i, v.AppendIndex)
+							if i == v.AppendIndex {
+								x.IsLast = true
+							}
+
+							// fmt.Printf("开始发送到应用机 me %v , i %v,  append %v \n", rf.me, i, v.AppendIndex)
 							rf.applyCh <- x
 
-							fmt.Printf("*********{lindex %v commitindex %v commad %v  pre %v i %v AppendIndex %v\n",
-								rf.me, index, commad, rf.preCommitIndex, i, v.AppendIndex)
+							// fmt.Printf("*********{lindex %v commitindex %v commad %v  pre %v i %v AppendIndex %v\n",
+							// 	rf.me, index, commad, rf.preCommitIndex, i, v.AppendIndex)
 
 						}
 						rf.commitIndex = v.AppendIndex
@@ -1059,6 +1089,10 @@ func (rf *Raft) LCommitLogRunTime() {
 					// fmt.Printf("*******主提交结束当前时间是 %02d 分 %02d 秒 %d 毫秒\n",
 					// 	i, i2, i3)
 				}
+
+				// dur := time.Since(start)
+				// fmt.Printf("!!!!!! 主节点发送花费的时间为 %v\n", dur)
+
 			} else {
 				return
 			}
@@ -1114,6 +1148,9 @@ func (rf *Raft) FCommitLogRunTime() {
 						Command:      commad,
 						CommandIndex: i,
 					}
+					if i == int(min) {
+						msg.IsLast = true
+					}
 					rf.applyCh <- msg
 					rf.commitIndex = i
 					// select {
@@ -1163,6 +1200,7 @@ func (rf *Raft) CommitLogRunTime(args AppendEntriesArgs) {
 				Command:      rf.logs[i].Command,
 				CommandIndex: i,
 			}
+
 			rf.applyCh <- msg
 			// fmt.Printf("----------index %v 在 commitindex %v log %v loglast %v\n",
 			// 	rf.me, rf.commitIndex, rf.logs[i].Command, rf.logLastIndex)
@@ -1467,8 +1505,8 @@ func (rf *Raft) ticker() {
 			time.Sleep(time.Duration(ms1) * time.Millisecond)
 
 			if rf.state == "C" && int(rf.voteNum) >= len(rf.peers)/2+1 {
-				fmt.Printf("index %v 成为 leader,voteNum : %v loglen :%v cueeterm %v\n ",
-					rf.me, rf.voteNum, rf.logLastIndex, rf.currentTerm)
+				// fmt.Printf("index %v 成为 leader,voteNum : %v loglen :%v cueeterm %v\n ",
+				// 	rf.me, rf.voteNum, rf.logLastIndex, rf.currentTerm)
 				//选举通过,成为leader,重置属性
 				rf.LeaderReset()
 				rf.state = "L"

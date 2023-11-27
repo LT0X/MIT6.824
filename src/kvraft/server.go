@@ -1,7 +1,7 @@
 package kvraft
 
 import (
-	"fmt"
+	"bytes"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -43,14 +43,18 @@ type Op struct {
 }
 
 type KVServer struct {
-	mu          sync.Mutex
-	me          int
-	rf          *raft.Raft
-	applyCh     chan raft.ApplyMsg
-	kvMap       map[string]string //本地service键值对
-	channelPool ChannelPool       //管道池
-	opIdMap     map[int]bool
-	clientMap   map[int]bool //表示客户端是否还和Server链接
+	mu           sync.Mutex
+	me           int
+	rf           *raft.Raft
+	applyCh      chan raft.ApplyMsg
+	snapshotCh   chan raft.ApplyMsg
+	kvMap        map[string]string //本地service键值对
+	channelPool  ChannelPool       //管道池
+	opIdMap      map[int]bool      //表示本地service是否已经处理该编号的请求
+	clientMap    map[int]bool      //表示客户端是否还和Server链接
+	snapshotDone bool              //表示kvServer创建快照任务是否已经完成
+
+	persister *raft.Persister
 
 	lastOpId int   //Cleark 最后的opId
 	dead     int32 // set by Kill()
@@ -112,13 +116,13 @@ func (kv *KVServer) applyChRunTime() {
 
 		case msg, _ := <-kv.applyCh:
 
-			if op, ok := msg.Command.(Op); ok {
-				fmt.Printf("测试《《《 : opid %v me %v op %v \n", op.Id, kv.me, op)
-
+			if op, ok := msg.Command.(Op); ok && msg.CommandValid {
+				// fmt.Printf("测试《《《 : opid %v me %v op %v \n", op.Id, kv.me, op)
+				// start := time.Now()
 				if _, ok := kv.rf.GetState(); ok {
 					c := kv.channelPool.GetChannel(int32(op.Id))
 					_, ok := kv.rf.GetState()
-					fmt.Printf("向管道发送结束请求 opID %v kvindex %v isLeader %v\n", op.Id, kv.me, ok)
+					// fmt.Printf("向管道发送结束请求 opID %v kvindex %v isLeader %v\n", op.Id, kv.me, ok)
 
 					// kv.rwLock.RLock()
 
@@ -132,14 +136,24 @@ func (kv *KVServer) applyChRunTime() {
 						c <- op.Id
 					}
 
-					fmt.Printf("这个才是测试 me %v\n", kv.me)
+					// fmt.Printf("这个才是测试 me %v\n", kv.me)
 				}
 
 				// v, _ := kv.opIdMap[op.Id]
 
+				if kv.maxraftstate != -1 && kv.snapshotDone && msg.IsLast &&
+					float32(kv.persister.RaftStateSize()) > (float32(kv.maxraftstate)*0.8) {
+					//日志过长，需要进行日志压缩持久化
+
+					// fmt.Printf("准备进行kvstatus 状态压缩 opid %v kv me %v 大小为 %v max %v index %v\n",
+					// 	op.Id, kv.me, float32(kv.persister.RaftStateSize()), kv.maxraftstate, msg.CommandIndex)
+					kv.snapshotCh <- msg
+
+				}
+
 				if v, _ := kv.getSyncMap(op.Id, kv.opIdMap); v {
-					fmt.Printf("结束了 *********** 错误 error opid %v me %v\n",
-						op.Id, kv.me)
+					// fmt.Printf("结束了 *********** 错误 error opid %v me %v\n",
+					// 	op.Id, kv.me)
 					continue
 				}
 
@@ -147,11 +161,17 @@ func (kv *KVServer) applyChRunTime() {
 				kv.setSyncMap(op.Id, true, kv.opIdMap)
 				// kv.opIdMap[op.Id] = true
 
-				fmt.Printf("结束了 ***********opid %v me %v\n", op.Id, kv.me)
+				// kv.lastOpId = op.Id
+				// dur := time.Since(start)
+				// fmt.Printf("!!!!!! 发送快照请求花费的时间为 %v\n", dur)
+				// fmt.Printf("结束了 ***********opid %v me %v\n", op.Id, kv.me)
 
+			} else if msg.SnapshotValid {
+				kv.DecodingKvStatus(msg.Snapshot)
 			}
 
 		}
+
 	}
 }
 
@@ -175,25 +195,99 @@ func (kv *KVServer) executeOp(op Op) {
 	}
 }
 
-func (kv *KVServer) monitorChannel(channel chan bool, opid int) {
+func (kv *KVServer) snapshotRunTime() {
+	//用于监控raft节点是否日志过长
 
-	//对每次处理客户端请求进行监视
-	//检查管道是否因为异常长时间不释放
-	//如果800ms还未处理完成，则认为异常，强制结束请求
+	for true {
 
-	time.Sleep(time.Millisecond * 3000)
+		select {
+		case v, _ := <-kv.snapshotCh:
 
-	// v, ok := kv.opIdMap[opid]
-	v, ok := kv.getSyncMap(opid, kv.opIdMap)
-	if !ok || !v {
-		fmt.Printf("监管已经去除 opid %v ok %v,v %v\n", opid, ok, v)
-		channel <- false
+			kv.snapshotDone = false
+
+			// kv.rf.CompressLogHandler(v.CommandIndex)
+			//进行kvservice 的编码
+
+			// start := time.Now()
+
+			data := kv.EncodingKvStatus()
+
+			kv.rf.Snapshot(v.CommandIndex, data)
+
+			kv.snapshotDone = true
+			// dur := time.Since(start)
+			// fmt.Printf(" 快照完成 commandIndex %v\n", v.CommandIndex)
+
+		}
 	}
 
-	// fmt.Printf("opid %v me %v 开始判断管道超时 v %v ok %v \n",
-	// 	opid, kv.me, v, ok)
+}
+
+func (kv *KVServer) EncodingKvStatus() []byte {
+
+	//对日志数据进行编码
+
+	lastopId := kv.lastOpId
+	opIdMap := make(map[int]bool)
+
+	kv.rwLock.Lock()
+	for i := 0; i < 15; i++ {
+		opIdMap[i] = kv.opIdMap[lastopId-i]
+	}
+
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(kv.kvMap)
+	e.Encode(opIdMap)
+	kv.rwLock.Unlock()
+	// fmt.Printf("这个opidmap 是 %v err为 %v\n", opIdMap, err)
+	kvSnapashot := w.Bytes()
+	kv.persister.Save(kv.persister.ReadRaftState(), kvSnapashot)
+
+	// fmt.Printf("kv me %v 的快照大小为 %v\n", kv.me, kv.persister.SnapshotSize())
+
+	return kvSnapashot
+}
+
+func (kv *KVServer) DecodingKvStatus(data []byte) {
+
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+
+	var kvMap map[string]string
+	var opIdMap map[int]bool
+
+	if d.Decode(&kvMap) != nil ||
+		d.Decode(&opIdMap) != nil {
+
+		// fmt.Printf("什么居然为空 kvmap %v opidMap %v \n", kvMap, opIdMap)
+
+	} else {
+		kv.kvMap = kvMap
+		kv.opIdMap = opIdMap
+	}
 
 }
+
+// func (kv *KVServer) monitorChannel(channel chan bool, opid int) {
+
+// 	//对每次处理客户端请求进行监视
+// 	//检查管道是否因为异常长时间不释放
+// 	//如果800ms还未处理完成，则认为异常，强制结束请求
+
+// 	time.Sleep(time.Millisecond * 3000)
+
+// 	// v, ok := kv.opIdMap[opid]
+// 	v, ok := kv.getSyncMap(opid, kv.opIdMap)
+// 	if !ok || !v {
+// 		fmt.Printf("监管已经去除 opid %v ok %v,v %v\n", opid, ok, v)
+// 		channel <- false
+// 	}
+
+// 	// fmt.Printf("opid %v me %v 开始判断管道超时 v %v ok %v \n",
+// 	// 	opid, kv.me, v, ok)
+
+// }
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	// Your code here.
@@ -211,7 +305,7 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 		reply.Done = true
 		v, IsExit := kv.getMapValue(args.Key)
 		reply.ServerLastOpId = kv.lastOpId
-		fmt.Printf("已经处理，提前释放 opid %v \n", args.Id)
+		// fmt.Printf("已经处理，提前释放 opid %v \n", args.Id)
 		if !IsExit {
 			reply.Value = ""
 			return
@@ -248,7 +342,7 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 		kv.setSyncMap(args.Id, false, kv.clientMap)
 	}()
 
-	fmt.Printf("管道开始监听 opid %v me %v\n", args.Id, kv.me)
+	// fmt.Printf("管道开始监听 opid %v me %v\n", args.Id, kv.me)
 	c := kv.channelPool.GetChannel(int32(args.Id))
 	// start := time.Now()
 
@@ -286,8 +380,8 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 			// }
 
 		case <-time.After(3 * time.Second):
-			// 2s服务器未能处理，表示出现异常，返回false
-			fmt.Printf("监管函数 强制下线 opid %v me %v\n", args.Id, kv.me)
+			// 3s服务器未能处理，表示出现异常，返回false
+			// fmt.Printf("监管函数 强制下线 opid %v me %v\n", args.Id, kv.me)
 			reply.NotLeader = true
 			return
 		}
@@ -359,7 +453,7 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 			// fmt.Printf("！！！！！！！！ isok me %v %v\n", isok, kv.me)
 
 			if isok == args.Id {
-				fmt.Printf("管道准备释放 opid %v me %v\n", args.Id, kv.me)
+				// fmt.Printf("管道准备释放 opid %v me %v\n", args.Id, kv.me)
 				reply.Done = true
 				reply.ServerLastOpId = kv.lastOpId
 				// dur := time.Since(start)
@@ -375,7 +469,7 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 			// 	return
 			// }
 		case <-time.After(3 * time.Second):
-			fmt.Printf("监管函数 强制下线 opid %v me %v\n", args.Id, kv.me)
+			// fmt.Printf("监管函数 强制下线 opid %v me %v\n", args.Id, kv.me)
 			reply.NotLeader = true
 			return
 		}
@@ -407,6 +501,10 @@ func (kv *KVServer) Kill() {
 	atomic.StoreInt32(&kv.dead, 1)
 	kv.rf.Kill()
 	// Your code here, if desired.
+	// fmt.Printf("kvserve 下线,进行连接清理工作")
+	// time.Sleep(4 * time.Second)
+	kv.EncodingKvStatus()
+
 }
 
 func (kv *KVServer) killed() bool {
@@ -434,12 +532,23 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv := new(KVServer)
 	kv.me = me
 	kv.maxraftstate = maxraftstate
-	kv.kvMap = make(map[string]string)
+	kv.snapshotDone = true
+
+	kv.snapshotCh = make(chan raft.ApplyMsg)
+
+	kv.persister = persister
+
 	kv.channelPool = *NewChannelPool(80)
 
-	kv.opIdMap = make(map[int]bool, 300)
-
 	kv.clientMap = make(map[int]bool, 300)
+
+	if len(kv.persister.ReadSnapshot()) == 0 {
+		kv.kvMap = make(map[string]string, 200)
+		kv.opIdMap = make(map[int]bool, 300)
+	} else {
+		// fmt.Printf("什么不等于null")
+		kv.readKvSnapshot()
+	}
 
 	// You may need initialization code here.
 
@@ -447,7 +556,17 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
 	go kv.applyChRunTime()
+	go kv.snapshotRunTime()
+
 	// You may need initialization code here.
 
 	return kv
+}
+
+func (kv *KVServer) readKvSnapshot() {
+
+	data := kv.persister.ReadSnapshot()
+
+	kv.DecodingKvStatus(data)
+
 }
