@@ -489,6 +489,7 @@ func TestRejoin2B(t *testing.T) {
 
 	// old leader connected again
 	cfg.connect(leader1)
+	fmt.Printf("leder1 %v启动了》》》》》》》》 \n", leader1)
 
 	cfg.one(104, 2, true)
 
@@ -1136,7 +1137,7 @@ func snapcommon(t *testing.T, name string, disconnect bool, reliable bool, crash
 	leader1 := cfg.checkOneLeader()
 
 	for i := 0; i < iters; i++ {
-		fmt.Printf("---------------------------------------------------------------------- %v\n", i)
+		// fmt.Printf("---------------------------------------------------------------------- %v\n", i)
 		victim := (leader1 + 1) % servers
 		sender := leader1
 		if i%3 == 1 {
@@ -1186,7 +1187,7 @@ func snapcommon(t *testing.T, name string, disconnect bool, reliable bool, crash
 			leader1 = cfg.checkOneLeader()
 		}
 	}
-	fmt.Println("{}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}")
+	// fmt.Println("{}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}")
 	cfg.end()
 }
 

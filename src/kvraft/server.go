@@ -56,7 +56,7 @@ type KVServer struct {
 
 	persister *raft.Persister
 
-	lastOpId int   //Cleark 最后的opId
+	lastOpId int   //处理请求的 最后的opId
 	dead     int32 // set by Kill()
 
 	rwLock sync.RWMutex

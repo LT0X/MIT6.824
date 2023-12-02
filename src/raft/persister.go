@@ -9,7 +9,9 @@ package raft
 // test with the original before submitting.
 //
 
-import "sync"
+import (
+	"sync"
+)
 
 type Persister struct {
 	mu        sync.Mutex
@@ -68,3 +70,29 @@ func (ps *Persister) SnapshotSize() int {
 	defer ps.mu.Unlock()
 	return len(ps.snapshot)
 }
+
+// func (ps *Persister) EncodingLog(logs []*Log) []byte {
+
+// 	//对日志数据进行编码
+// 	w := new(bytes.Buffer)
+
+// 	e := labgob.NewEncoder(w)
+// 	e.Encode(logs)
+
+// 	return w.Bytes()
+
+// }
+
+// func (ps *Persister) DecodingLog(data []byte) []*Log {
+
+// 	r := bytes.NewBuffer(data)
+// 	d := labgob.NewDecoder(r)
+// 	var logs []*Log
+
+// 	if d.Decode(&logs) != nil {
+// 		return logs
+// 	}
+
+// 	return nil
+
+// }

@@ -54,7 +54,7 @@ func Worker(mapf func(string, string) []KeyValue,
 		if reply.Task == "m" {
 
 			//分配到map任务
-			kv := mapperHandle(reply.File, mapf)
+			kv := mapperHandler(reply.File, mapf)
 
 			//创建Nreduce个reduce的键值对存储
 			kvs := make([][]KeyValue, reply.NReduce)
@@ -96,7 +96,7 @@ func Worker(mapf func(string, string) []KeyValue,
 				allKv = append(allKv, *kv...)
 			}
 
-			final := ReduceHandle(allKv, reducef)
+			final := ReduceHandler(allKv, reducef)
 			fileName := fmt.Sprintf("mr-out-%v", reply.TaskNun)
 			createOutputFile(fileName, *final)
 			res, _ := CallReduceDone(reply.TaskNun)
@@ -112,7 +112,7 @@ func Worker(mapf func(string, string) []KeyValue,
 		}
 		break
 	}
-	for res, _ := CallCoordinatorDone(); !res.IsDone; {
+	for res, _ := CallWorkerDone(); !res.IsDone; {
 		//休眠两秒重新检测
 		time.Sleep(time.Second * 2)
 	}
@@ -120,7 +120,7 @@ func Worker(mapf func(string, string) []KeyValue,
 	return
 }
 
-func mapperHandle(filename string, mapf func(string, string) []KeyValue) *[]KeyValue {
+func mapperHandler(filename string, mapf func(string, string) []KeyValue) *[]KeyValue {
 
 	intermediate := []KeyValue{}
 
@@ -138,7 +138,7 @@ func mapperHandle(filename string, mapf func(string, string) []KeyValue) *[]KeyV
 	return &intermediate
 }
 
-func ReduceHandle(intermediate []KeyValue,
+func ReduceHandler(intermediate []KeyValue,
 	reducef func(string, []string) string) *[]KeyValue {
 
 	var final []KeyValue
@@ -285,12 +285,12 @@ func CallReduceDone(taskNum int32) (*ReduceDoneReply, error) {
 	return &reply, nil
 }
 
-func CallCoordinatorDone() (*CoordinatorDoneReply, error) {
+func CallWorkerDone() (*CoordinatorDoneReply, error) {
 
 	args := CoordinatorDoneArgs{}
 	reply := CoordinatorDoneReply{}
 
-	ok := call("Coordinator.CoordinatorDone", &args, &reply)
+	ok := call("Coordinator.WorkerDone", &args, &reply)
 	if !ok {
 		return nil, errors.New("call failed")
 	}

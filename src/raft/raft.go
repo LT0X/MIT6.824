@@ -795,7 +795,9 @@ func (rf *Raft) SendAppendLogsHandler() {
 
 	for true {
 
-		time.Sleep(13 * time.Millisecond)
+		//轮询时间
+		time.Sleep(17 * time.Millisecond)
+
 		if rf.state != "L" {
 			return
 		}

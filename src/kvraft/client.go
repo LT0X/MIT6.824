@@ -15,7 +15,7 @@ var opId int32
 type Clerk struct {
 	servers []*labrpc.ClientEnd
 
-	channelPool *ChannelPool //客户端使用的管道池
+	// channelPool *ChannelPool //客户端使用的管道池
 
 	leaderIndex int //表示Service leader的索引缓存
 
@@ -34,7 +34,7 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck := new(Clerk)
 	ck.servers = servers
 	ck.leaderIndex = int(nrand()) % len(servers)
-	ck.channelPool = NewChannelPool(4)
+	// ck.channelPool = NewChannelPool(4)
 
 	//等待raft初步启动
 	time.Sleep(300 * time.Millisecond)
@@ -42,6 +42,7 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	return ck
 }
 
+//废弃方案
 func (ck *Clerk) monitorRPCRunTime(channel chan bool,
 	gReply *GetReply, pReply *PutAppendReply) {
 

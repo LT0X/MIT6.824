@@ -15,15 +15,15 @@ import (
 
 type Coordinator struct {
 	// Your definitions here.
-	NReduce        int              //表示Reduce任务的个数
-	MNum           map[string]int32 //表示最新map的任务编号
-	RNum           int32            //表示最新reduce任务编号的分配
-	FilesMap       SafeMap          //用来确认文件是否被分配
-	ReduceMap      map[int32]bool   //用来确认Reduce任务是否完成
-	RDoneCount     int32            //表示reduce任务完成的数量
-	MDoneCount     int32            //表示Mapper任务完成的数量
-	*CircularQueue                  //表示处理文件的队列
-	*ReduceQueue                    //表示重启任务队列
+	NReduce      int              //表示Reduce任务的个数
+	MNum         map[string]int32 //表示最新map的任务编号
+	RNum         int32            //表示最新reduce任务编号的分配
+	FilesMap     SafeMap          //用来确认文件是否被分配,
+	ReduceMap    map[int32]bool   //用来确认Reduce任务是否完成
+	RDoneCount   int32            //表示reduce任务完成的数量
+	MDoneCount   int32            //表示Mapper任务完成的数量
+	*MapQueue                     //表示处理文件的队列
+	*ReduceQueue                  //表示重启任务队列
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -48,7 +48,7 @@ func (c *Coordinator) AssignedTasks(args *AssignedArgs, reply *AssignedReply) er
 		//分配mapper任务
 		var file string
 		for true {
-			file, _ = c.CircularQueue.Dequeue()
+			file, _ = c.MapQueue.Dequeue()
 			if file == "" {
 				//again
 				fmt.Println("文件队列为空")
@@ -76,7 +76,7 @@ func (c *Coordinator) AssignedTasks(args *AssignedArgs, reply *AssignedReply) er
 
 		num := c.AssignTaskNum("r", "")
 		if num == -1 {
-			//队列未空，重新分配
+			//队列为空，重新分配
 			reply.Task = "a"
 			return nil
 		}
@@ -112,16 +112,17 @@ func (c *Coordinator) ReduceDone(args *ReduceDoneArgs, reply *ReduceDoneReply) e
 	return nil
 }
 
-func (c *Coordinator) CoordinatorDone(args *ReduceDoneArgs, reply *ReduceDoneReply) error {
+func (c *Coordinator) WorkerDone(args *ReduceDoneArgs, reply *ReduceDoneReply) error {
 
-	if c.CircularQueue.count <= 0 && c.RNum >= int32(c.NReduce) &&
+	if c.MapQueue.count <= 0 && c.RNum >= int32(c.NReduce) &&
 		c.ReduceQueue.count <= 0 && c.RDoneCount == int32(c.NReduce) {
-		//给充足的时间让worker成功下线
+
 		reply.IsDone = true
 		return nil
 	}
 	reply.IsDone = false
 	return nil
+
 }
 
 func (c *Coordinator) MapTaskListner(task string) {
@@ -134,7 +135,7 @@ func (c *Coordinator) MapTaskListner(task string) {
 		//10s内没有完成任务，需要重新分配任务
 		c.FilesMap.SetFalse(task)
 		fmt.Printf("Map %v号没有完成作业，加入队列 %v\n", task, err)
-		c.CircularQueue.Enqueue(task)
+		c.MapQueue.Enqueue(task)
 	}
 }
 
@@ -174,7 +175,7 @@ func (c *Coordinator) server() {
 func (c *Coordinator) Done() bool {
 	ret := false
 
-	if c.CircularQueue.count <= 0 && c.RNum >= int32(c.NReduce) &&
+	if c.MapQueue.count <= 0 && c.RNum >= int32(c.NReduce) &&
 		c.ReduceQueue.count <= 0 && c.RDoneCount == int32(c.NReduce) {
 		ret = true
 		//给充足的时间让worker成功下线
@@ -195,12 +196,13 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 
 	c := Coordinator{}
 	fileMap := make(map[string]bool, len(files))
-	queue := NewCircularQueue(len(files))
+	queue := NewMapQueue(len(files))
 	rqueue := NewReduceQueue(nReduce)
 	reduceMap := make(map[int32]bool, nReduce)
 	mNum := make(map[string]int32, len(files))
 	// Your code here.
 
+	//将待处理文件列表写入任务队列
 	for index, file := range files {
 		fileMap[file] = false
 		queue.Enqueue(file)
@@ -212,7 +214,7 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 
 	c.NReduce = nReduce
 	c.FilesMap.m = fileMap
-	c.CircularQueue = queue
+	c.MapQueue = queue
 	c.ReduceQueue = rqueue
 	c.ReduceMap = reduceMap
 	c.MNum = mNum
@@ -222,27 +224,27 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 }
 
 func (c *Coordinator) AssignJobs() string {
-	// fmt.Printf("%v --- %v --- %v --", c.RNum, c.CircularQueue.count, c.ReduceQueue.count)
-	if c.RNum >= int32(c.NReduce) && c.CircularQueue.count <= 0 &&
+	// fmt.Printf("%v --- %v --- %v --", c.RNum, c.MapQueue.count, c.ReduceQueue.count)
+	if c.RNum >= int32(c.NReduce) && c.MapQueue.count <= 0 &&
 		c.ReduceQueue.count <= 0 && c.RDoneCount >= int32(c.NReduce) {
 		//exit
 		return "e"
 	}
-	if c.CircularQueue.count > 0 {
+	if c.MapQueue.count > 0 {
 		//优先处理Mapper 任务
 		return "m"
 	}
-	if c.MDoneCount < int32(c.CircularQueue.size) {
+	if c.MDoneCount < int32(c.MapQueue.size) {
 		//表示中途有map奔溃，需要重新分配
 		time.Sleep(time.Second * 8)
 		fmt.Printf("MdoneCount %v\n", c.MDoneCount)
-		if c.MDoneCount < int32(c.CircularQueue.size) {
+		if c.MDoneCount < int32(c.MapQueue.size) {
 			keys, _ := c.FilesMap.GetAllKeys()
 			//加入队列
 			for _, v := range keys {
 				j, _ := c.FilesMap.Get(v)
 				if j != true {
-					c.CircularQueue.Enqueue(v)
+					c.MapQueue.Enqueue(v)
 				}
 			}
 			return "m"
@@ -273,7 +275,7 @@ func (c *Coordinator) AssignTaskNum(task string, file string) int32 {
 }
 
 //-----------------------------------------------------------
-type CircularQueue struct {
+type MapQueue struct {
 	items     []string
 	size      int
 	headIndex int
@@ -281,8 +283,8 @@ type CircularQueue struct {
 	count     int
 }
 
-func NewCircularQueue(size int) *CircularQueue {
-	return &CircularQueue{
+func NewMapQueue(size int) *MapQueue {
+	return &MapQueue{
 		items:     make([]string, size),
 		size:      size,
 		headIndex: 0,
@@ -291,25 +293,25 @@ func NewCircularQueue(size int) *CircularQueue {
 	}
 }
 
-func (cq *CircularQueue) Enqueue(item string) bool {
-	if cq.count == cq.size {
+func (mq *MapQueue) Enqueue(item string) bool {
+	if mq.count == mq.size {
 		return false // 队列已满
 	}
 
-	cq.items[cq.tailIndex] = item
-	cq.tailIndex = (cq.tailIndex + 1) % cq.size
-	cq.count++
+	mq.items[mq.tailIndex] = item
+	mq.tailIndex = (mq.tailIndex + 1) % mq.size
+	mq.count++
 	return true
 }
 
-func (cq *CircularQueue) Dequeue() (string, bool) {
-	if cq.count == 0 {
+func (mq *MapQueue) Dequeue() (string, bool) {
+	if mq.count == 0 {
 		return "", false // 队列为空
 	}
 
-	item := cq.items[cq.headIndex]
-	cq.headIndex = (cq.headIndex + 1) % cq.size
-	cq.count--
+	item := mq.items[mq.headIndex]
+	mq.headIndex = (mq.headIndex + 1) % mq.size
+	mq.count--
 	return item, true
 }
 
