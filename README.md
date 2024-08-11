@@ -13,7 +13,7 @@
 http://research.google.com/archive/mapreduce-osdi04.pdf
 ### 整体的架构设计
 
-#### MapReduce的设计架构
+#### 本项目MapReduce的架构设计
 ![0242ce53052e02cbc3be329c0e7e8e1](https://github.com/LT0X/MIT6.824/assets/88709343/c99d1e53-5d4f-4f78-8a43-bba2ae4753b9)
 
 #### MapReduce的技术细节
@@ -303,7 +303,7 @@ https://pdos.csail.mit.edu/6.824/papers/raft-extended.pdf
 ### 整体的架构设计
 
 
-#### 选举架构设计图
+#### 本项目选举架构设计图
 
 ![a27e364acaf307f751c1fb3cdb20a3f](https://github.com/LT0X/MIT6.824/assets/88709343/3c01059c-9230-4828-a6bb-8d5bacc5cdea)
    
@@ -375,7 +375,7 @@ func (h *Heartbeat) IsNormal(i int) bool {
 	return judge
 }
 ```
-#### raft 同步架构图
+#### 本项目raft 同步架构图
 
 ![2f4af53586507ea4a4308983074f4f8](https://github.com/LT0X/MIT6.824/assets/88709343/eb2ef754-cf85-4ebd-acef-8bd33d4f11df)
 
@@ -913,7 +913,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 ### 整体的架构设计
 
 
-#### KVService架构设计图
+#### 本项目KVService架构设计图
 ![9f32f8bb6adcf0891f4e9c51d33d960](https://github.com/LT0X/MIT6.824/assets/88709343/692457d2-9f7f-4017-a1b3-9675d3a502c6)
 #### KVService 后台运行的协程
 ![db73be0d32fd396a6f6bb51bac8c5fd](https://github.com/LT0X/MIT6.824/assets/88709343/3196db7f-8730-4983-b4f9-2146713ca880)
