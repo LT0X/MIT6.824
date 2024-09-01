@@ -919,7 +919,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 ![db73be0d32fd396a6f6bb51bac8c5fd](https://github.com/LT0X/MIT6.824/assets/88709343/3196db7f-8730-4983-b4f9-2146713ca880)
 
 
-### raft的技术细节
+### KVService的技术细节
 
 这次的Lab是和之前做的Lab2 raft进行结合做一个可靠的KVService，要实现整体的架构是C/S架构，即客户端和服务器的形式，实现的主体有Client 和Server.
 
